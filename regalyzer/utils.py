@@ -87,3 +87,35 @@ def find_timestamp_value(start_key, key_name_suffix_to_find):
     except (RegistryParse.UnknownTypeException, AttributeError):
         pass
     return "N/A"
+    
+def format_filetime(filetime: int):
+    """Correctly parses a 64-bit Windows FILETIME value."""
+    from datetime import datetime, timezone, timedelta # Local import
+    if not isinstance(filetime, int) or filetime == 0:
+        return "N/A"
+    try:
+        return (datetime(1601, 1, 1, tzinfo=timezone.utc) + timedelta(microseconds=filetime // 10)).strftime('%Y-%m-%d %H:%M:%S')
+    except (ValueError, OSError):
+        return "Invalid Timestamp"
+
+def parse_shell_item_path(data):
+    """A simplified parser for shell items to extract the path string."""
+    import struct # Local import
+    try:
+        if not isinstance(data, bytes) or len(data) < 4: return "[Invalid Data]"
+        path_parts = []
+        offset = 0
+        while offset < len(data):
+            item_size = struct.unpack_from('<H', data, offset)[0]
+            if item_size == 0: break
+            item_data = data[offset : offset + item_size]
+            item_type = item_data[2]
+            path_segment = None
+            if item_type in [0x31, 0x32, 0xb1]:
+                path_segment = item_data.split(b'\x00\x00')[0].decode('utf-16-le', 'ignore').split('\x00')[0]
+            elif item_type == 0x2f:
+                path_segment = item_data[3:].split(b'\x00')[0].decode('ascii', 'ignore')
+            if path_segment: path_parts.append(path_segment)
+            offset += item_size
+        return '\\'.join(path_parts)
+    except Exception: return "[Parsing Error]"
