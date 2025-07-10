@@ -15,18 +15,24 @@ from rich.console import Console
 # To add a new parser, simply import it here and add it to the PARSERS list.
 from regalyzer.parsers import os_info_parser 
 from regalyzer.parsers import network_info_parser
+from regalyzer.parsers import env_vars_parser
 from regalyzer.parsers import storage_parser
 from regalyzer.parsers import sam_parser
 from regalyzer.parsers import rdp_parser
+from regalyzer.parsers import bam_parser
+from regalyzer.parsers import user_activity_parser
 
 # --- List of all available parsers ---
 # The order in this list determines the order of execution.
 PARSERS = [
     ("System Information", os_info_parser),
     ("Network Configuration", network_info_parser),
+    ("Environment Variables", env_vars_parser),
     ("Storage & USB History", storage_parser),
     ("SAM User Accounts", sam_parser),
     ("RDP Usage", rdp_parser),
+    ("Program Execution (BAM)", bam_parser),
+    ("User Activity", user_activity_parser),
 ]
 
 def main():
