@@ -10,7 +10,7 @@ from Registry import Registry, RegistryParse
 from rich.table import Table
 
 # Import shared utilities from our package
-from regalyzer.utils import print_error, get_value, format_filetime, parse_shell_item_path
+from regalyzer.utils import print_error, get_value, format_filetime, parse_shell_item_path, get_user_profiles
 
 def run(console, image_root: str):
     """
@@ -39,6 +39,8 @@ def run(console, image_root: str):
                 user_profiles.append({"username": username, "sid": sid_key.name(), "ntuser_path": ntuser_path})
     except Exception as e:
         print_error(f"Could not parse user profiles from SOFTWARE hive: {e}"); return False
+    
+    user_profiles = get_user_profiles(image_root, console)
 
     if not user_profiles:
         console.print("[yellow]No user profiles could be located.[/yellow]"); return True
