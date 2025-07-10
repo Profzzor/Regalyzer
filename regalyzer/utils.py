@@ -4,6 +4,8 @@
 Regalyzer Toolkit - Shared Utility Functions
 """
 import struct
+import os
+import re
 from datetime import datetime, timezone, timedelta
 from rich.console import Console
 from rich.panel import Panel
@@ -119,3 +121,55 @@ def parse_shell_item_path(data):
             offset += item_size
         return '\\'.join(path_parts)
     except Exception: return "[Parsing Error]"
+
+def get_user_profiles(image_root, console):
+    """
+    Finds all user profiles by parsing the SOFTWARE hive.
+    This function is platform-independent and correctly handles and normalizes
+    Windows paths regardless of the host OS.
+    """
+
+    software_path = os.path.join(image_root, 'Windows', 'System32', 'config', 'SOFTWARE')
+    if not os.path.exists(software_path):
+        print_error("Required SOFTWARE hive not found for user analysis.", console)
+        return []
+
+    user_profiles = []
+    try:
+        reg_software = Registry.Registry(software_path)
+        profile_list_key = reg_software.open("Microsoft\\Windows NT\\CurrentVersion\\ProfileList")
+        
+        for sid_key in profile_list_key.subkeys():
+            profile_path_raw = get_value(sid_key, "ProfileImagePath", "")
+            if not profile_path_raw: continue
+
+            # --- THE DEFINITIVE PLATFORM-INDEPENDENT FIX ---
+            # 1. Manually expand common environment variables.
+            # Replace backslashes with forward slashes for consistency before processing.
+            clean_path = profile_path_raw.replace('\\', '/')
+            clean_path = clean_path.replace('%SystemRoot%', 'Windows')
+            clean_path = clean_path.replace('%systemroot%', 'Windows')
+            
+            # 2. Use a regular expression to reliably remove drive letters (e.g., "C:")
+            path_no_drive = re.sub(r'^[a-zA-Z]:/', '', clean_path)
+            
+            # 3. Create the full path relative to our image root
+            # and normalize it for the current operating system.
+            relative_path = path_no_drive.strip('/')
+            final_profile_path = os.path.normpath(os.path.join(image_root, relative_path))
+            
+            username = os.path.basename(final_profile_path)
+            
+            # 4. Add the user profile with now-correct paths.
+            user_profiles.append({
+                "username": username,
+                "sid": sid_key.name(),
+                "profile_path": final_profile_path,
+                "ntuser_path": os.path.join(final_profile_path, "NTUSER.DAT"),
+                "usrclass_path": os.path.join(final_profile_path, "AppData", "Local", "Microsoft", "Windows", "UsrClass.dat")
+            })
+
+    except Exception as e:
+        print_error(f"Could not parse user profiles from SOFTWARE hive: {e}", console)
+    
+    return user_profiles
