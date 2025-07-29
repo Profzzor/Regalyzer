@@ -106,24 +106,6 @@ def run(console, image_root: str):
                 else: console.print("[dim]  No TypedPaths history found.[/dim]")
             except Registry.RegistryKeyNotFoundException: console.print("[dim]  No TypedPaths key found.[/dim]")
 
-            # --- Open/Save MRU ---
-            console.print("\n[bold]Open/Save MRU - File Dialog History:[/bold]")
-            os_mru_path = "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ComDlg32\\OpenSavePidlMRU"
-            try:
-                os_mru_key = reg_user.open(os_mru_path)
-                os_table = Table(title="Open/Save History"); os_table.add_column("Extension", style="yellow"); os_table.add_column("File Path", style="white")
-                for ext_key in os_mru_key.subkeys():
-                    mru_list = get_value(ext_key, "MRUListEx", b'')
-                    if mru_list:
-                        for i in range(len(mru_list) // 4):
-                            entry_name = str(int.from_bytes(mru_list[i*4:(i+1)*4], 'little'))
-                            path_data = get_value(ext_key, entry_name)
-                            if path_data != "N/A":
-                                os_table.add_row(ext_key.name(), parse_shell_item_path(path_data))
-                if os_table.row_count > 0: console.print(os_table)
-                else: console.print("[dim]  No Open/Save history found.[/dim]")
-            except Registry.RegistryKeyNotFoundException: console.print("[dim]  No OpenSavePidlMRU key found.[/dim]")
-
         except Exception as e:
             print_error(f"Failed to process NTUSER.DAT for {profile['username']}: {e}")
             
