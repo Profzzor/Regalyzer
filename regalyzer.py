@@ -54,7 +54,7 @@ def main():
         console.print(f"[bold red]Error:[/bold red] The specified directory does not exist: {args.image_root}")
         sys.exit(1)
 
-    console.print(f"\n[+] Analyzing target: [cyan]{args.image_root}[/cyan]")
+    console.print(f"\n[+] Analyzing target: [cyan]{args.image_root} [/cyan]")
     
     parsers_run_count = 0
     for name, module in PARSERS:
