@@ -1,6 +1,12 @@
 # Regalyzer/regalyzer/parsers/user_activity_parser.py
 """
-Regalyzer - Comprehensive User Activity Parser Module
+Regalyzer - Comprehensive User Activity Parser Module (Definitive)
+
+This definitive version includes parsers for:
+- UserAssist (GUI Program Execution)
+- RunMRU (Commands from 'Run' box)
+- TypedPaths (Paths typed into Explorer)
+- WordWheelQuery (Search terms typed into Explorer)
 """
 import os
 import traceback
@@ -10,7 +16,7 @@ from Registry import Registry, RegistryParse
 from rich.table import Table
 
 # Import shared utilities from our package
-from regalyzer.utils import print_error, get_value, format_filetime, parse_shell_item_path, get_user_profiles
+from regalyzer.utils import print_error, get_value, format_filetime, get_user_profiles, format_datetime_obj
 
 def run(console, image_root: str):
     """
@@ -18,28 +24,7 @@ def run(console, image_root: str):
     """
     console.print(f"\n[bold green]===[/bold green] User & Application Activity Analysis [bold green]===[/bold green]")
     
-    # --- 1. Find User Profiles ---
-    software_path = os.path.join(image_root, 'Windows', 'System32', 'config', 'SOFTWARE')
-    if not os.path.exists(software_path):
-        print_error("Required SOFTWARE hive not found for this module."); return False
-    
-    user_profiles = []
-    try:
-        reg_software = Registry.Registry(software_path)
-        profile_list_key = reg_software.open("Microsoft\\Windows NT\\CurrentVersion\\ProfileList")
-        for sid_key in profile_list_key.subkeys():
-            profile_path_raw = get_value(sid_key, "ProfileImagePath", "")
-            if not profile_path_raw: continue
-            expanded_path = os.path.expandvars(profile_path_raw)
-            drive, path_no_drive = os.path.splitdrive(expanded_path)
-            final_profile_path = os.path.join(image_root, path_no_drive.strip(os.sep))
-            username = os.path.basename(final_profile_path)
-            ntuser_path = os.path.join(final_profile_path, "NTUSER.DAT")
-            if os.path.exists(ntuser_path):
-                user_profiles.append({"username": username, "sid": sid_key.name(), "ntuser_path": ntuser_path})
-    except Exception as e:
-        print_error(f"Could not parse user profiles from SOFTWARE hive: {e}"); return False
-    
+    # --- 1. Call the central function to get the list of users ---
     user_profiles = get_user_profiles(image_root, console)
 
     if not user_profiles:
@@ -48,13 +33,14 @@ def run(console, image_root: str):
     # --- 2. For each user, parse their NTUSER.DAT ---
     for profile in user_profiles:
         console.print(f"\n[bold]>>> Analyzing User: [cyan]{profile['username']}[/cyan][/bold]")
-        if not os.path.exists(profile['ntuser_path']):
+        ntuser_path = profile['ntuser_path']
+        if not os.path.exists(ntuser_path):
             console.print("[dim]  NTUSER.DAT not found.[/dim]"); continue
         
         try:
-            reg_user = Registry.Registry(profile['ntuser_path'])
+            reg_user = Registry.Registry(ntuser_path)
 
-            # --- UserAssist ---
+            # --- UserAssist Parser (Working, Unchanged) ---
             console.print("\n[bold]UserAssist - GUI Program Execution:[/bold]")
             ua_path = "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\UserAssist"
             try:
@@ -72,7 +58,7 @@ def run(console, image_root: str):
                                 run_count = struct.unpack_from('<I', data, 4)[0]
                                 filetime = struct.unpack_from('<Q', data, 60)[0]
                                 last_run = format_filetime(filetime)
-                                if run_count > 0: # Only show programs that have been run
+                                if run_count > 0:
                                     found_ua = True
                                     ua_table.add_row(decoded_name, str(run_count), last_run)
                         if ua_table.row_count > 0: console.print(ua_table)
@@ -80,7 +66,7 @@ def run(console, image_root: str):
                 if not found_ua: console.print("[dim]  No UserAssist data found.[/dim]")
             except Registry.RegistryKeyNotFoundException: console.print("[dim]  No UserAssist key found.[/dim]")
             
-            # --- RunMRU ---
+            # --- RunMRU Parser (Working, Unchanged) ---
             console.print("\n[bold]RunMRU - 'Run' Box History:[/bold]")
             runmru_path = "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU"
             try:
@@ -94,7 +80,7 @@ def run(console, image_root: str):
                 else: console.print("[dim]  No RunMRU history found.[/dim]")
             except Registry.RegistryKeyNotFoundException: console.print("[dim]  No RunMRU key found.[/dim]")
 
-            # --- TypedPaths ---
+            # --- TypedPaths Parser (Working, Unchanged) ---
             console.print("\n[bold]TypedPaths - Explorer Address Bar History:[/bold]")
             tp_path = "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\TypedPaths"
             try:
@@ -105,8 +91,37 @@ def run(console, image_root: str):
                 if tp_table.row_count > 0: console.print(tp_table)
                 else: console.print("[dim]  No TypedPaths history found.[/dim]")
             except Registry.RegistryKeyNotFoundException: console.print("[dim]  No TypedPaths key found.[/dim]")
+            
+            # --- NEW: WordWheelQuery Parser ---
+            console.print("\n[bold]WordWheelQuery - Explorer Search History:[/bold]")
+            wwq_path = "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\WordWheelQuery"
+            try:
+                wwq_key = reg_user.open(wwq_path)
+                mru_list_val = get_value(wwq_key, "MRUListEx")
+                if mru_list_val != "N/A":
+                    wwq_table = Table(title="Explorer Search History")
+                    wwq_table.add_column("Order", style="yellow")
+                    wwq_table.add_column("Search Term", style="white")
+                    wwq_table.add_column("Timestamp (UTC)", style="green")
+
+                    mru_list = struct.unpack(f'<{len(mru_list_val)//4}I', mru_list_val)
+                    for mru_id in mru_list:
+                        search_term_bytes = get_value(wwq_key, str(mru_id))
+                        if isinstance(search_term_bytes, bytes):
+                            search_term = search_term_bytes.decode('utf-16-le', 'ignore').strip('\x00')
+                            # The timestamp is the last write time of the parent key
+                            wwq_table.add_row(
+                                str(mru_id),
+                                search_term,
+                                format_datetime_obj(wwq_key.timestamp())
+                            )
+                    console.print(wwq_table)
+                else:
+                    console.print("[dim]  No WordWheelQuery history found.[/dim]")
+            except Registry.RegistryKeyNotFoundException:
+                console.print("[dim]  No WordWheelQuery key found.[/dim]")
 
         except Exception as e:
-            print_error(f"Failed to process NTUSER.DAT for {profile['username']}: {e}")
+            print_error(f"Failed to process NTUSER.DAT for {profile['username']}: {e}", console)
             
     return True
