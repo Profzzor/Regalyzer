@@ -10,7 +10,7 @@ import contextlib
 import traceback
 
 from Registry import Registry
-from impacket.examples.secretsdump import LocalOperations, SAMHashes
+from impacket.examples.secretsdump import LocalOperations, SAMHashes, LSASecrets
 from impacket.dcerpc.v5.samr import UF_ACCOUNTDISABLE, UF_DONT_EXPIRE_PASSWD
 
 from regalyzer.utils import print_error, filetime_to_datetime, parse_v_string, format_report_dt, get_value
@@ -22,6 +22,7 @@ def run(console, image_root: str):
     config_path = os.path.join(image_root, 'Windows', 'System32', 'config')
     sam_path = os.path.join(config_path, 'SAM')
     system_path = os.path.join(config_path, 'SYSTEM')
+    security_path = os.path.join(config_path, 'SECURITY')
 
     if not os.path.exists(sam_path) or not os.path.exists(system_path):
         return False
@@ -111,7 +112,28 @@ def run(console, image_root: str):
             }
             for key, value in report.items():
                 console.print(f"  [cyan]{key:<25}:[/cyan] {value}")
-        return True
+
+        console.print("\n[bold]Cached Domain Logon Information (DCC2 / MSCache):[/bold]")
+        try:
+            lsa = LSASecrets(security_path, boot_key, isRemote=False)
+            cached_hashes = lsa.dumpCachedHashes()
+
+            if cached_hashes:
+                cached_table = Table(title="Cached Credentials", show_lines=True)
+                cached_table.add_column("Username", style="bold cyan", justify="left")
+                cached_table.add_column("DCC2 Hash", style="white", justify="left")
+                cached_table.add_column("Last Login (UTC)", style="green", justify="left")
+
+                for user, hash_val, last_login in sorted(cached_hashes, key=lambda c: c[0]):
+                    cached_table.add_row(user, hash_val, format_report_dt(last_login))
+                console.print(cached_table)
+            else:
+                console.print("[dim]  No cached domain credentials found.[/dim]")
+
+            console.print(f"\n[dim]-- Source Hives -> SECURITY, SYSTEM[/dim]")
+
+        except Exception as e:
+            print_error(f"Could not dump cached domain credentials: {e}", console)
 
     except Exception as e:
         print_error(f"An unexpected error occurred in the SAM parser: {e}")
