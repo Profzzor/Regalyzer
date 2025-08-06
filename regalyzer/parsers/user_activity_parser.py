@@ -72,13 +72,33 @@ def run(console, image_root: str):
             try:
                 runmru_key = reg_user.open(runmru_path)
                 mru_list = get_value(runmru_key, "MRUList", "")
+                
                 if mru_list:
-                    run_table = Table(title=f"Run Command History"); run_table.add_column("Order", style="yellow"); run_table.add_column("Command", style="white")
+                    # The key's timestamp is the last time any command was run
+                    last_run_time = format_datetime_obj(runmru_key.timestamp())
+                    
+                    run_table = Table(title=f"Run Command History for {profile['username']}")
+                    run_table.add_column("Order", style="yellow")
+                    run_table.add_column("Command", style="white")
+                    run_table.add_column("Last Updated (UTC)", style="green")
+                    
                     for char in mru_list:
-                        run_table.add_row(char, get_value(runmru_key, char))
+                        command = get_value(runmru_key, char)
+                        # --- THIS IS THE FIX ---
+                        # Clean the command by removing the trailing \1
+                        cleaned_command = command.rsplit('\\', 1)[0] if command.endswith('\\1') else command
+                        
+                        run_table.add_row(
+                            char,
+                            cleaned_command,
+                            last_run_time
+                        )
                     console.print(run_table)
-                else: console.print("[dim]  No RunMRU history found.[/dim]")
-            except Registry.RegistryKeyNotFoundException: console.print("[dim]  No RunMRU key found.[/dim]")
+                    console.print(f"[dim]-- Source Key -> NTUSER.DAT\\{runmru_path}[/dim]")
+                else:
+                    console.print("[dim]  No RunMRU history found.[/dim]")
+            except Registry.RegistryKeyNotFoundException:
+                console.print("[dim]  No RunMRU key found for this user.[/dim]")
 
             # --- TypedPaths Parser (Working, Unchanged) ---
             console.print("\n[bold]TypedPaths - Explorer Address Bar History:[/bold]")
