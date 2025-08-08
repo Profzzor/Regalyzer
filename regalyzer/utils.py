@@ -173,3 +173,28 @@ def get_user_profiles(image_root, console):
         print_error(f"Could not parse user profiles from SOFTWARE hive: {e}", console)
     
     return user_profiles
+
+def parse_systemtime_from_binary(data):
+    """
+    Correctly parses a 16-byte SYSTEMTIME structure from a REG_BINARY value.
+    """
+    try:
+        if not isinstance(data, bytes) or len(data) < 16:
+            return "N/A"
+        
+        # Unpack the 8 WORDs (2-byte unsigned integers) of a SYSTEMTIME struct
+        year, month, day_of_week, day, hour, minute, second, milliseconds = struct.unpack('<HHHHHHHH', data)
+        
+        # A year of 0 indicates an empty/null timestamp
+        if year == 0:
+            return "N/A"
+            
+        return datetime(year, month, day, hour, minute, second).strftime('%Y-%m-%d %H:%M:%S')
+    except (struct.error, ValueError):
+        return "[Parsing Error]"
+
+def format_mac_address(mac_bytes):
+    """Formats a binary MAC address into a human-readable string."""
+    if not isinstance(mac_bytes, bytes) or len(mac_bytes) < 6:
+        return "N/A"
+    return ':'.join(f'{b:02X}' for b in mac_bytes)
